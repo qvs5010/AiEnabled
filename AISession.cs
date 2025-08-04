@@ -1,5 +1,7 @@
 ﻿using AiEnabled.Ai.Support;
 using AiEnabled.API;
+using AiEnabled.Api;
+using AiEnabled.Api.Data;
 using AiEnabled.Bots;
 using AiEnabled.Bots.Roles.Helpers;
 using AiEnabled.ConfigData;
@@ -1045,6 +1047,18 @@ namespace AiEnabled
         if (IsServer)
         {
           LocalBotAPI = new LocalBotAPI();
+
+          // Initialize new AiEnabled API
+          try
+          {
+            // Register message handlers for remote API communication
+            MyAPIGateway.Utilities.RegisterMessageHandler(2337, HandleApiRequest);
+            Logger.Log("AiEnabled API: Registered message handler for remote API requests (ID: 2337)", MessageType.INFO);
+          }
+          catch (Exception ex)
+          {
+            Logger.Log($"AiEnabled API: Failed to register message handler - {ex.Message}", MessageType.ERROR);
+          }
 
           if (sessionOK)
           {
@@ -6628,6 +6642,196 @@ namespace AiEnabled
         playerHelpers.Add(bot);
       }
     }
+
+    #region API Bot Registry Methods
+
+    /// <summary>
+    /// Gets a bot by its entity ID for API access
+    /// </summary>
+    /// <param name="entityId">Entity ID of the bot</param>
+    /// <returns>BotBase instance or null if not found</returns>
+    public BotBase GetBotById(long entityId)
+    {
+      return Bots.TryGetValue(entityId, out var bot) ? bot : null;
+    }
+
+    /// <summary>
+    /// Gets all active bots for API access
+    /// </summary>
+    /// <returns>List of all active bots</returns>
+    public List<BotBase> GetAllBots()
+    {
+      return Bots.Values.ToList();
+    }
+
+    /// <summary>
+    /// Registers a bot in the system (called automatically by AddBot)
+    /// </summary>
+    /// <param name="bot">Bot to register</param>
+    public void RegisterBot(BotBase bot)
+    {
+      if (bot?.Character != null)
+      {
+        Bots[bot.Character.EntityId] = bot;
+      }
+    }
+
+    /// <summary>
+    /// Unregisters a bot from the system
+    /// </summary>
+    /// <param name="bot">Bot to unregister</param>
+    public void UnregisterBot(BotBase bot)
+    {
+      if (bot?.Character != null)
+      {
+        Bots.TryRemove(bot.Character.EntityId, out _);
+      }
+    }
+
+    /// <summary>
+    /// Unregisters a bot by entity ID
+    /// </summary>
+    /// <param name="entityId">Entity ID of the bot to unregister</param>
+    public void UnregisterBot(long entityId)
+    {
+      Bots.TryRemove(entityId, out _);
+    }
+
+    #endregion
+
+    #region API Message Handler
+
+    /// <summary>
+    /// Handles API requests from external mods via ModAPI messaging
+    /// </summary>
+    /// <param name="obj">Message object containing API request</param>
+    private void HandleApiRequest(object obj)
+    {
+      try
+      {
+        if (obj is MyTuple<string, object[]> request)
+        {
+          var (method, args) = request;
+          var api = AiEnabledApiImplementation.Instance;
+          
+          Logger?.Log($"AiEnabled API: Received request for method '{method}'", MessageType.INFO);
+
+          // Handle API calls
+          switch (method)
+          {
+            case "SpawnBot":
+              if (args.Length > 0 && args[0] is BotSpawnRequest spawnRequest)
+              {
+                var result = api.SpawnBot(spawnRequest);
+                MyAPIGateway.Utilities.SendModMessage(2338, result);
+              }
+              else
+              {
+                Logger?.Log("AiEnabled API: SpawnBot - Invalid arguments", MessageType.WARNING);
+                MyAPIGateway.Utilities.SendModMessage(2338, 0L);
+              }
+              break;
+
+            case "DespawnBot":
+              if (args.Length > 0 && args[0] is long botEntityId)
+              {
+                var result = api.DespawnBot(botEntityId);
+                MyAPIGateway.Utilities.SendModMessage(2338, result);
+              }
+              else
+              {
+                Logger?.Log("AiEnabled API: DespawnBot - Invalid arguments", MessageType.WARNING);
+                MyAPIGateway.Utilities.SendModMessage(2338, false);
+              }
+              break;
+
+            case "GetBotInfo":
+              if (args.Length > 0 && args[0] is long entityId)
+              {
+                var result = api.GetBotInfo(entityId);
+                MyAPIGateway.Utilities.SendModMessage(2338, result);
+              }
+              else
+              {
+                Logger?.Log("AiEnabled API: GetBotInfo - Invalid arguments", MessageType.WARNING);
+                MyAPIGateway.Utilities.SendModMessage(2338, null);
+              }
+              break;
+
+            case "GetAllBots":
+              var allBots = api.GetAllBots();
+              MyAPIGateway.Utilities.SendModMessage(2338, allBots);
+              break;
+
+            case "SetBotTarget":
+              if (args.Length >= 2 && args[0] is long botId && args[1] is long targetId)
+              {
+                var result = api.SetBotTarget(botId, targetId);
+                MyAPIGateway.Utilities.SendModMessage(2338, result);
+              }
+              else
+              {
+                Logger?.Log("AiEnabled API: SetBotTarget - Invalid arguments", MessageType.WARNING);
+                MyAPIGateway.Utilities.SendModMessage(2338, false);
+              }
+              break;
+
+            case "SetBotDestination":
+              if (args.Length >= 2 && args[0] is long botId2 && args[1] is Vector3D destination)
+              {
+                var result = api.SetBotDestination(botId2, destination);
+                MyAPIGateway.Utilities.SendModMessage(2338, result);
+              }
+              else
+              {
+                Logger?.Log("AiEnabled API: SetBotDestination - Invalid arguments", MessageType.WARNING);
+                MyAPIGateway.Utilities.SendModMessage(2338, false);
+              }
+              break;
+
+            case "ResetBotTargeting":
+              if (args.Length > 0 && args[0] is long botId3)
+              {
+                var result = api.ResetBotTargeting(botId3);
+                MyAPIGateway.Utilities.SendModMessage(2338, result);
+              }
+              else
+              {
+                Logger?.Log("AiEnabled API: ResetBotTargeting - Invalid arguments", MessageType.WARNING);
+                MyAPIGateway.Utilities.SendModMessage(2338, false);
+              }
+              break;
+
+            case "CanSpawn":
+              var canSpawn = api.CanSpawn();
+              MyAPIGateway.Utilities.SendModMessage(2338, canSpawn);
+              break;
+
+            case "GetActiveBotCount":
+              var count = api.GetActiveBotCount();
+              MyAPIGateway.Utilities.SendModMessage(2338, count);
+              break;
+
+            default:
+              Logger?.Log($"AiEnabled API: Unknown method '{method}'", MessageType.WARNING);
+              MyAPIGateway.Utilities.SendModMessage(2338, null);
+              break;
+          }
+        }
+        else
+        {
+          Logger?.Log("AiEnabled API: Invalid request format", MessageType.WARNING);
+          MyAPIGateway.Utilities.SendModMessage(2338, null);
+        }
+      }
+      catch (Exception ex)
+      {
+        Logger?.Log($"AiEnabled API: Exception in HandleApiRequest - {ex.Message}\n{ex.StackTrace}", MessageType.ERROR);
+        MyAPIGateway.Utilities.SendModMessage(2338, null);
+      }
+    }
+
+    #endregion
 
     void UpdatePlayers(long playerRemoved = 0L)
     {
